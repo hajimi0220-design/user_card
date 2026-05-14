@@ -142,10 +142,29 @@ onMounted(() => {
   eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text: string) => {
     streamingRaw.value = text;
   });
-  eventOn(iframe_events.GENERATION_ENDED, () => {
+  eventOn(iframe_events.GENERATION_ENDED, async () => {
     isGenerating.value = false;
     lastRaw.value = streamingRaw.value;
+    const raw = streamingRaw.value;
     streamingRaw.value = '';
+
+    const storyMatch = /<story>([\s\S]*?)<\/story>/.exec(raw);
+    if (!storyMatch) return;
+    const narrativeOnly = storyMatch[1]
+      .replace(/<sms[^>]*>[\s\S]*?<\/sms>/g, '')
+      .replace(/<call[^/]*\/>/g, '')
+      .replace(/<npc_scene[^>]*>[\s\S]*?<\/npc_scene>/g, '')
+      .trim();
+
+    const variables = Mvu.getMvuData({ type: 'chat' });
+    if (!_.has(variables, 'stat_data')) _.set(variables, 'stat_data', {});
+    const stat_data = _.get(variables, 'stat_data');
+    _.set(stat_data, '_叙事内容', narrativeOnly);
+    const hist: any[] = _.get(stat_data, '_叙事历史', []);
+    hist.push({ id: Date.now(), text: narrativeOnly, ts: Date.now() });
+    if (hist.length > 50) hist.shift();
+    _.set(stat_data, '_叙事历史', hist);
+    await Mvu.replaceMvuData(variables, { type: 'chat' });
   });
 });
 
@@ -191,8 +210,7 @@ async function rollbackTo(idx: number) {
 
 .app-root {
   width: 100%;
-  height: 100%;
-  max-height: 100vh;
+  height: 600px;
   background: linear-gradient(160deg, #0f0c1a 0%, #1a1028 50%, #0d1520 100%);
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   border-radius: 20px;
