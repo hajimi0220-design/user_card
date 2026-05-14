@@ -31,19 +31,30 @@ const props = defineProps<{
   d: z.infer<typeof Schema>;
   isGenerating: boolean;
   streamingRaw: string;
+  lastNarrative: string;
 }>();
 
 const isThinking = computed(() =>
-  props.isGenerating && !!props.streamingRaw && !props.streamingRaw.includes('<story>')
+  props.isGenerating && !!props.streamingRaw && !/<story\b/i.test(props.streamingRaw)
 );
+
+const savedNarrative = computed(() => (props.d as any)._叙事内容 || props.lastNarrative || '');
 
 const displayNarrative = computed(() => {
   if (props.isGenerating && props.streamingRaw) {
-    const m = props.streamingRaw.match(/<story>([\s\S]*?)(?:<\/story>|$)/);
-    if (m) return m[1].replace(/<sms[^>]*>[\s\S]*?<\/sms>/g, '').replace(/<call[^/]*\/>/g, '').replace(/<npc_scene[^>]*>[\s\S]*?<\/npc_scene>/g, '').trim();
-    return '';
+    const m = props.streamingRaw.match(/<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i);
+    if (m) {
+      const narrative = m[1]
+        .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
+        .replace(/<call\b[^>]*\/>/gi, '')
+        .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
+        .replace(/<npc_scene\b[^>]*>[\s\S]*?<\/npc_scene>/gi, '')
+        .trim();
+      return narrative || savedNarrative.value;
+    }
+    return savedNarrative.value;
   }
-  return (props.d as any)._叙事内容 ?? '';
+  return savedNarrative.value;
 });
 
 const npcScenes = computed(() => (props.d as any)._叙事NPC场景 ?? []);

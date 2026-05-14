@@ -173,6 +173,25 @@ function 构建汇总注入(stat_data: any): string | null {
   return 片段.join('\n\n────────\n\n');
 }
 
+function 清理叙事正文(text: string) {
+  return text
+    .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
+    .replace(/<call\b[^>]*\/>/gi, '')
+    .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
+    .replace(/<npc_scene\b[^>]*>[\s\S]*?<\/npc_scene>/gi, '')
+    .replace(/<thinking\b[^>]*>[\s\S]*?(?:<\/thinking>|$)/gi, '')
+    .replace(/<context\b[^>]*>[\s\S]*?(?:<\/context>|$)/gi, '')
+    .replace(/<lenitxt\b[^>]*>[\s\S]*?(?:<\/lenitxt>|$)/gi, '')
+    .replace(/<state\b[^>]*>[\s\S]*?(?:<\/state>|$)/gi, '')
+    .replace(/<wine\b[^>]*>[\s\S]*?(?:<\/wine>|$)/gi, '')
+    .trim();
+}
+
+function 提取叙事正文(raw: string) {
+  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(raw);
+  return 清理叙事正文(storyMatch ? storyMatch[1] : raw);
+}
+
 // ══════════════════════════════════════════════════════════════
 // 主逻辑
 // ══════════════════════════════════════════════════════════════
@@ -284,7 +303,7 @@ $(async () => {
     const smsRe = /<sms\s+from="([^"]+)"(?:\s+dir="([^"]+)")?>([\s\S]*?)<\/sms>/g;
     const callRe = /<call\s+from="([^"]+)"(?:\s+action="([^"]+)")?[^/]*\/>/g;
     const npcSceneRe = /<npc_scene\s+from="([^"]+)">([\s\S]*?)<\/npc_scene>/g;
-    const storyRe = /<story>([\s\S]*?)<\/story>/;
+    const storyRe = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i;
     const stateRe = /<state>([\s\S]*?)<\/state>/;
 
     let m: RegExpExecArray | null;
@@ -322,11 +341,7 @@ $(async () => {
       dirty = true;
     }
     if (storyMatch) {
-      const narrativeOnly = storyMatch[1]
-        .replace(/<sms[^>]*>[\s\S]*?<\/sms>/g, '')
-        .replace(/<call[^/]*\/>/g, '')
-        .replace(/<npc_scene[^>]*>[\s\S]*?<\/npc_scene>/g, '')
-        .trim();
+      const narrativeOnly = 提取叙事正文(raw);
       _.set(stat_data, '_叙事内容', narrativeOnly);
       const hist: any[] = _.get(stat_data, '_叙事历史', []);
       hist.push({ id: message_id, text: narrativeOnly, ts: Date.now() });

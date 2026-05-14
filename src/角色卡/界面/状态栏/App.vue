@@ -36,7 +36,13 @@
 
     <!-- 内容区 -->
     <div class="tab-content">
-      <TabStory v-if="tab === 'story'" :d="d" :is-generating="isGenerating" :streaming-raw="streamingRaw" />
+      <TabStory
+        v-if="tab === 'story'"
+        :d="d"
+        :is-generating="isGenerating"
+        :streaming-raw="streamingRaw"
+        :last-narrative="lastNarrative"
+      />
       <TabHero  v-if="tab === 'hero'"  :d="d" />
       <TabNpc   v-if="tab === 'npc'"   :d="d" />
       <TabLog   v-if="tab === 'log'"   :d="d" />
@@ -127,11 +133,41 @@ const inputText = ref('');
 const isGenerating = ref(false);
 const streamingRaw = ref('');
 const lastRaw = ref('');
+const lastNarrative = ref('');
 const showDebug = ref(false);
 
 // thinking 阶段：已开始生成但还没出现 <story> 标签
 const isThinking = computed(() =>
-  isGenerating.value && !!streamingRaw.value && !streamingRaw.value.includes('<story>')
+  isGenerating.value && !!streamingRaw.value && !/<story\b/i.test(streamingRaw.value)
+);
+
+function cleanupNarrative(text: string) {
+  return text
+    .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
+    .replace(/<call\b[^>]*\/>/gi, '')
+    .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
+    .replace(/<npc_scene\b[^>]*>[\s\S]*?<\/npc_scene>/gi, '')
+    .replace(/<thinking\b[^>]*>[\s\S]*?(?:<\/thinking>|$)/gi, '')
+    .replace(/<context\b[^>]*>[\s\S]*?(?:<\/context>|$)/gi, '')
+    .replace(/<lenitxt\b[^>]*>[\s\S]*?(?:<\/lenitxt>|$)/gi, '')
+    .replace(/<state\b[^>]*>[\s\S]*?(?:<\/state>|$)/gi, '')
+    .replace(/<wine\b[^>]*>[\s\S]*?(?:<\/wine>|$)/gi, '')
+    .trim();
+}
+
+function extractNarrative(raw: string) {
+  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(raw);
+  return cleanupNarrative(storyMatch ? storyMatch[1] : raw);
+}
+
+watch(
+  () => (d.value as any)._叙事内容,
+  value => {
+    if (typeof value === 'string' && value.trim()) {
+      lastNarrative.value = value;
+    }
+  },
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -148,13 +184,9 @@ onMounted(() => {
     const raw = streamingRaw.value;
     streamingRaw.value = '';
 
-    const storyMatch = /<story>([\s\S]*?)<\/story>/.exec(raw);
-    if (!storyMatch) return;
-    const narrativeOnly = storyMatch[1]
-      .replace(/<sms[^>]*>[\s\S]*?<\/sms>/g, '')
-      .replace(/<call[^/]*\/>/g, '')
-      .replace(/<npc_scene[^>]*>[\s\S]*?<\/npc_scene>/g, '')
-      .trim();
+    const narrativeOnly = extractNarrative(raw);
+    if (!narrativeOnly) return;
+    lastNarrative.value = narrativeOnly;
 
     const variables = Mvu.getMvuData({ type: 'chat' });
     if (!_.has(variables, 'stat_data')) _.set(variables, 'stat_data', {});
