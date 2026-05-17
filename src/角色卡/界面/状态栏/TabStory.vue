@@ -31,6 +31,7 @@ const props = defineProps<{
   d: z.infer<typeof Schema>;
   isGenerating: boolean;
   streamingRaw: string;
+  lastRaw: string;
   lastNarrative: string;
 }>();
 
@@ -38,21 +39,48 @@ const isThinking = computed(() =>
   props.isGenerating && !!props.streamingRaw && !/<story\b/i.test(props.streamingRaw)
 );
 
-const savedNarrative = computed(() => (props.d as any)._叙事内容 || props.lastNarrative || '');
+function normalizeTags(text: string) {
+  return String(text ?? '').replace(/＜/g, '<').replace(/＞/g, '>');
+}
+
+function cleanupNarrative(text: string) {
+  return normalizeTags(text)
+    .replace(/```(?:\w+)?/g, '')
+    .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
+    .replace(/<call\b[^>]*\/>/gi, '')
+    .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
+    .replace(/<npc_scene\b[^>]*>[\s\S]*?<\/npc_scene>/gi, '')
+    .replace(/<thinking\b[^>]*>[\s\S]*?(?:<\/thinking>|$)/gi, '')
+    .replace(/<context\b[^>]*>[\s\S]*?(?:<\/context>|$)/gi, '')
+    .replace(/<lenitxt\b[^>]*>[\s\S]*?(?:<\/lenitxt>|$)/gi, '')
+    .replace(/<state\b[^>]*>[\s\S]*?(?:<\/state>|$)/gi, '')
+    .replace(/<wine\b[^>]*>[\s\S]*?(?:<\/wine>|$)/gi, '')
+    .replace(/<UpdateVariable\b[^>]*>[\s\S]*?(?:<\/UpdateVariable>|$)/gi, '')
+    .replace(/<Analysis\b[^>]*>[\s\S]*?(?:<\/Analysis>|$)/gi, '')
+    .replace(/<JSONPatch\b[^>]*>[\s\S]*?(?:<\/JSONPatch>|$)/gi, '')
+    .trim();
+}
+
+function extractNarrative(raw: string) {
+  const normalized = normalizeTags(raw);
+  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(normalized);
+  return cleanupNarrative(storyMatch ? storyMatch[1] : normalized);
+}
+
+const historyNarrative = computed(() => {
+  const history = (props.d as any)._叙事历史;
+  if (!Array.isArray(history)) return '';
+  const latest = history[history.length - 1]?.text;
+  return typeof latest === 'string' ? latest.trim() : '';
+});
+
+const savedNarrative = computed(() =>
+  (props.d as any)._叙事内容 || props.lastNarrative || historyNarrative.value || extractNarrative(props.lastRaw) || ''
+);
 
 const displayNarrative = computed(() => {
   if (props.isGenerating && props.streamingRaw) {
-    const m = props.streamingRaw.match(/<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i);
-    if (m) {
-      const narrative = m[1]
-        .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
-        .replace(/<call\b[^>]*\/>/gi, '')
-        .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
-        .replace(/<npc_scene\b[^>]*>[\s\S]*?<\/npc_scene>/gi, '')
-        .trim();
-      return narrative || savedNarrative.value;
-    }
-    return savedNarrative.value;
+    return extractNarrative(props.streamingRaw) || savedNarrative.value;
   }
   return savedNarrative.value;
 });

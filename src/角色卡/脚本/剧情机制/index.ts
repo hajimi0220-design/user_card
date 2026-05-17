@@ -174,7 +174,8 @@ function 构建汇总注入(stat_data: any): string | null {
 }
 
 function 清理叙事正文(text: string) {
-  return text
+  return 标准化标签(text)
+    .replace(/```(?:\w+)?/g, '')
     .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
     .replace(/<call\b[^>]*\/>/gi, '')
     .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
@@ -184,12 +185,36 @@ function 清理叙事正文(text: string) {
     .replace(/<lenitxt\b[^>]*>[\s\S]*?(?:<\/lenitxt>|$)/gi, '')
     .replace(/<state\b[^>]*>[\s\S]*?(?:<\/state>|$)/gi, '')
     .replace(/<wine\b[^>]*>[\s\S]*?(?:<\/wine>|$)/gi, '')
+    .replace(/<UpdateVariable\b[^>]*>[\s\S]*?(?:<\/UpdateVariable>|$)/gi, '')
+    .replace(/<Analysis\b[^>]*>[\s\S]*?(?:<\/Analysis>|$)/gi, '')
+    .replace(/<JSONPatch\b[^>]*>[\s\S]*?(?:<\/JSONPatch>|$)/gi, '')
     .trim();
 }
 
 function 提取叙事正文(raw: string) {
-  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(raw);
-  return 清理叙事正文(storyMatch ? storyMatch[1] : raw);
+  const normalized = 标准化标签(raw);
+  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(normalized);
+  return 清理叙事正文(storyMatch ? storyMatch[1] : normalized);
+}
+
+function 标准化标签(text: string) {
+  return String(text ?? '').replace(/＜/g, '<').replace(/＞/g, '>');
+}
+
+function 追加叙事历史(stat_data: any, narrativeOnly: string, id: number) {
+  const hist: any[] = _.get(stat_data, '_叙事历史', []);
+  if (hist[hist.length - 1]?.text === narrativeOnly) return;
+  hist.push({ id, text: narrativeOnly, ts: Date.now() });
+  if (hist.length > 50) hist.shift();
+  _.set(stat_data, '_叙事历史', hist);
+}
+
+function 获取ChatStatData() {
+  const variables = Mvu.getMvuData({ type: 'chat' });
+  if (!_.has(variables, 'stat_data')) {
+    _.set(variables, 'stat_data', Schema.parse({}));
+  }
+  return { variables, stat_data: _.get(variables, 'stat_data') };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -296,7 +321,7 @@ $(async () => {
   // ── AI 回复完成：解析标签 + 写消息队列 + 清除标记 ──────────
   eventOn(tavern_events.MESSAGE_RECEIVED, async (message_id: number) => {
     const chat = getChatMessages(message_id);
-    const raw = chat[0]?.message ?? '';
+    const raw = 标准化标签(chat[0]?.message ?? '');
 
     // 解析标签
     const queue: any[] = [];
@@ -326,37 +351,31 @@ $(async () => {
       await deleteChatMessages([message_id], { refresh: 'none' });
     }
 
-    // 读 chat 级别变量（不依赖特定楼层，iframe 始终可读）
-    const variables = Mvu.getMvuData({ type: 'chat' });
-    if (!_.has(variables, 'stat_data')) {
-      _.set(variables, 'stat_data', Schema.parse({}));
+    const narrativeOnly = 提取叙事正文(raw);
+    let statePatch: any = null;
+    if (stateMatch) {
+      try {
+        statePatch = JSON.parse(stateMatch[1]);
+      } catch { /* ignore malformed JSON */ }
     }
-    const stat_data = _.get(variables, 'stat_data');
 
+    // 重新读取最新 chat 变量再写入，避免并发的 iframe 生成收尾被旧快照覆盖。
+    const { variables, stat_data } = 获取ChatStatData();
     let dirty = false;
 
-    // 写消息队列 + 叙事内容
     if (queue.length > 0) {
       _.set(stat_data, '_消息队列', queue);
       dirty = true;
     }
-    if (storyMatch) {
-      const narrativeOnly = 提取叙事正文(raw);
+    if (narrativeOnly) {
       _.set(stat_data, '_叙事内容', narrativeOnly);
-      const hist: any[] = _.get(stat_data, '_叙事历史', []);
-      hist.push({ id: message_id, text: narrativeOnly, ts: Date.now() });
-      if (hist.length > 50) hist.shift();
-      _.set(stat_data, '_叙事历史', hist);
+      追加叙事历史(stat_data, narrativeOnly, message_id);
       dirty = true;
     }
-
-    // 写 NPC 场景
     if (npcScenes.length > 0) {
       _.set(stat_data, '_叙事NPC场景', npcScenes);
       dirty = true;
     }
-
-    // 持久化短信/电话到 _短信历史
     for (const item of queue) {
       if (item.type === 'sms') {
         const hist: any[] = _.get(stat_data, `_短信历史.${item.from}`, []);
@@ -365,14 +384,9 @@ $(async () => {
         dirty = true;
       }
     }
-
-    // 合并 <state> 补丁
-    if (stateMatch) {
-      try {
-        const patch = JSON.parse(stateMatch[1]);
-        _.merge(stat_data, patch);
-        dirty = true;
-      } catch { /* ignore malformed JSON */ }
+    if (statePatch) {
+      _.merge(stat_data, statePatch);
+      dirty = true;
     }
 
     // 清除背景解锁标记

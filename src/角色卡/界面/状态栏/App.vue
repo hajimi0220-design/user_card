@@ -41,6 +41,7 @@
         :d="d"
         :is-generating="isGenerating"
         :streaming-raw="streamingRaw"
+        :last-raw="lastRaw"
         :last-narrative="lastNarrative"
       />
       <TabHero  v-if="tab === 'hero'"  :d="d" />
@@ -133,7 +134,10 @@ const inputText = ref('');
 const isGenerating = ref(false);
 const streamingRaw = ref('');
 const lastRaw = ref('');
-const lastNarrative = ref('');
+const activeGenerationId = ref<string | null>(null);
+const finishedGenerationIds = new Set<string>();
+const NARRATIVE_CACHE_PREFIX = 'user_card.lastNarrative';
+const lastNarrative = ref(loadCachedNarrative());
 const showDebug = ref(false);
 
 // thinking 阶段：已开始生成但还没出现 <story> 标签
@@ -142,7 +146,8 @@ const isThinking = computed(() =>
 );
 
 function cleanupNarrative(text: string) {
-  return text
+  return normalizeTags(text)
+    .replace(/```(?:\w+)?/g, '')
     .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
     .replace(/<call\b[^>]*\/>/gi, '')
     .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
@@ -152,51 +157,130 @@ function cleanupNarrative(text: string) {
     .replace(/<lenitxt\b[^>]*>[\s\S]*?(?:<\/lenitxt>|$)/gi, '')
     .replace(/<state\b[^>]*>[\s\S]*?(?:<\/state>|$)/gi, '')
     .replace(/<wine\b[^>]*>[\s\S]*?(?:<\/wine>|$)/gi, '')
+    .replace(/<UpdateVariable\b[^>]*>[\s\S]*?(?:<\/UpdateVariable>|$)/gi, '')
+    .replace(/<Analysis\b[^>]*>[\s\S]*?(?:<\/Analysis>|$)/gi, '')
+    .replace(/<JSONPatch\b[^>]*>[\s\S]*?(?:<\/JSONPatch>|$)/gi, '')
     .trim();
 }
 
 function extractNarrative(raw: string) {
-  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(raw);
-  return cleanupNarrative(storyMatch ? storyMatch[1] : raw);
+  const normalized = normalizeTags(raw);
+  const storyMatch = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i.exec(normalized);
+  return cleanupNarrative(storyMatch ? storyMatch[1] : normalized);
+}
+
+function normalizeTags(text: string) {
+  return String(text ?? '').replace(/＜/g, '<').replace(/＞/g, '>');
+}
+
+function narrativeCacheKey() {
+  const currentMessageId = typeof getCurrentMessageId === 'function' ? getCurrentMessageId() : null;
+  if (currentMessageId !== undefined && currentMessageId !== null) {
+    return `${NARRATIVE_CACHE_PREFIX}:message:${currentMessageId}`;
+  }
+  let chatId = 'unknown';
+  try {
+    chatId = SillyTavern.getCurrentChatId?.() || chatId;
+  } catch { /* ignore unavailable SillyTavern context */ }
+  return `${NARRATIVE_CACHE_PREFIX}:${chatId}`;
+}
+
+function loadCachedNarrative() {
+  try {
+    return localStorage.getItem(narrativeCacheKey()) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberNarrative(text: string) {
+  const narrative = text.trim();
+  if (!narrative) return;
+  lastNarrative.value = narrative;
+  try {
+    localStorage.setItem(narrativeCacheKey(), narrative);
+  } catch { /* ignore storage quota/private mode errors */ }
+}
+
+function appendNarrativeHistory(stat_data: any, narrativeOnly: string, id = Date.now()) {
+  const hist: any[] = _.get(stat_data, '_叙事历史', []);
+  if (hist[hist.length - 1]?.text === narrativeOnly) return;
+  hist.push({ id, text: narrativeOnly, ts: Date.now() });
+  if (hist.length > 50) hist.shift();
+  _.set(stat_data, '_叙事历史', hist);
+}
+
+async function persistNarrative(narrativeOnly: string) {
+  const variables = Mvu.getMvuData({ type: 'chat' });
+  if (!_.has(variables, 'stat_data')) _.set(variables, 'stat_data', {});
+  const stat_data = _.get(variables, 'stat_data');
+  _.set(stat_data, '_叙事内容', narrativeOnly);
+  appendNarrativeHistory(stat_data, narrativeOnly);
+  await Mvu.replaceMvuData(variables, { type: 'chat' });
+}
+
+function shouldHandleGeneration(generationId?: string) {
+  return !activeGenerationId.value || !generationId || generationId === activeGenerationId.value;
+}
+
+async function finishGeneration(rawText: string, generationId?: string) {
+  if (!shouldHandleGeneration(generationId)) return;
+
+  isGenerating.value = false;
+  const raw = rawText || streamingRaw.value || lastRaw.value;
+  lastRaw.value = raw;
+  streamingRaw.value = '';
+
+  if (!raw.trim()) return;
+
+  const narrativeOnly = extractNarrative(raw);
+  if (!narrativeOnly) return;
+
+  rememberNarrative(narrativeOnly);
+  if (generationId && finishedGenerationIds.has(generationId)) return;
+
+  await persistNarrative(narrativeOnly);
+  if (generationId) finishedGenerationIds.add(generationId);
+  if (generationId && activeGenerationId.value === generationId) {
+    activeGenerationId.value = null;
+  }
 }
 
 watch(
   () => (d.value as any)._叙事内容,
   value => {
     if (typeof value === 'string' && value.trim()) {
-      lastNarrative.value = value;
+      rememberNarrative(value);
     }
   },
   { immediate: true },
 );
 
+watch(
+  () => (d.value as any)._叙事历史,
+  value => {
+    const latest = Array.isArray(value) ? value[value.length - 1]?.text : '';
+    if (typeof latest === 'string' && latest.trim()) {
+      rememberNarrative(latest);
+    }
+  },
+  { deep: true, immediate: true },
+);
+
 onMounted(() => {
-  eventOn(iframe_events.GENERATION_STARTED, () => {
+  eventOn(iframe_events.GENERATION_STARTED, (generationId: string) => {
+    if (!shouldHandleGeneration(generationId)) return;
     isGenerating.value = true;
     streamingRaw.value = '';
   });
-  eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text: string) => {
+  eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text: string, generationId: string) => {
+    if (!shouldHandleGeneration(generationId)) return;
     streamingRaw.value = text;
+    const narrativeOnly = extractNarrative(text);
+    if (narrativeOnly) rememberNarrative(narrativeOnly);
   });
-  eventOn(iframe_events.GENERATION_ENDED, async () => {
-    isGenerating.value = false;
-    lastRaw.value = streamingRaw.value;
-    const raw = streamingRaw.value;
-    streamingRaw.value = '';
-
-    const narrativeOnly = extractNarrative(raw);
-    if (!narrativeOnly) return;
-    lastNarrative.value = narrativeOnly;
-
-    const variables = Mvu.getMvuData({ type: 'chat' });
-    if (!_.has(variables, 'stat_data')) _.set(variables, 'stat_data', {});
-    const stat_data = _.get(variables, 'stat_data');
-    _.set(stat_data, '_叙事内容', narrativeOnly);
-    const hist: any[] = _.get(stat_data, '_叙事历史', []);
-    hist.push({ id: Date.now(), text: narrativeOnly, ts: Date.now() });
-    if (hist.length > 50) hist.shift();
-    _.set(stat_data, '_叙事历史', hist);
-    await Mvu.replaceMvuData(variables, { type: 'chat' });
+  eventOn(iframe_events.GENERATION_ENDED, (text: string, generationId: string) => {
+    void finishGeneration(text, generationId);
   });
 });
 
@@ -204,7 +288,19 @@ async function sendMessage() {
   const text = inputText.value.trim();
   if (!text || isGenerating.value) return;
   inputText.value = '';
-  await generate({ user_input: text, should_stream: true, max_chat_history: 0 });
+  const generationId = `user-card-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  activeGenerationId.value = generationId;
+  isGenerating.value = true;
+  streamingRaw.value = '';
+  try {
+    const result = await generate({ generation_id: generationId, user_input: text, should_stream: true, max_chat_history: 0 });
+    const raw = typeof result === 'string' ? result : result.content ?? '';
+    await finishGeneration(raw, generationId);
+  } catch (error) {
+    isGenerating.value = false;
+    if (activeGenerationId.value === generationId) activeGenerationId.value = null;
+    console.error(error);
+  }
 }
 
 // ── 历史楼层 ──────────────────────────────────────────────────
