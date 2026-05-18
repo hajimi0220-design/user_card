@@ -1,0 +1,124 @@
+---
+变量输出格式:
+  rule:
+    - you must output the update analysis and the actual update commands at once in the end of every reply
+    - the update commands works like the **JSON Patch (RFC 6902)** standard, must be a valid JSON array
+    - supported operations: replace / delta / insert / remove / move
+    - "delta" updates a number field by adding the given value (positive or negative)
+    - "insert" adds new keys to objects or appends to arrays (use "-" as index to append)
+    - fields starting with `_` are readonly — never output commands targeting them (e.g. `_城市地图`, `_总结系统._汇总信号`)
+    - fields managed by script — never output commands targeting them directly:
+        好感度等级, 当前态度 (auto-synced from 好感度经验 by script)
+        背景档案.*.已解锁, 背景档案.*.本回合刚解锁 (auto-set by script)
+    - before writing each command, you MUST check the variable's `type` and `合法值` from 变量更新规则
+      — if the field has `合法值`, the new value MUST be one of those listed values, no exceptions
+      — if the field has `type: number`, use "delta" instead of "replace" whenever possible
+    - 小总结: insert one entry every reply, key format "YYYYMMDD_NN" (NN = 01,02,03...)
+
+  format: |-
+    <UpdateVariable>
+    <Analysis>
+    ## Time & Scene
+    - Time passed since last reply: ${e.g. ~10 minutes / next morning / same moment}
+    - Dramatic updates allowed (special event or long time gap): ${yes / no}
+
+    ## Mandatory checks (go through EVERY variable below, skip only if clearly unaffected)
+
+    ### World
+    - 世界.当前时间段 [合法值: 清晨/上午/下午/傍晚/夜晚/深夜]: ${current value → new value or "no change"}
+    - 世界.当前日期 / 当前星期: ${no change / new date}
+    - 世界.天气: ${no change / new weather}
+
+    ### 主角
+    - 主角.当前地点ID → 坐标: ${location changed? new ID and coords or "no change"}
+    - 主角.精神状态 [±3~20]: ${reason → delta}
+    - 主角.精力 [±5~25]: ${reason → delta}
+    - 主角.饥饿度 [±8~60]: ${reason → delta}
+    - 主角.社交需求 [±5~30]: ${reason → delta}
+    - 主角.当前情绪: ${new value or "no change"}
+    - 主角.CG外观: ${changed? describe new state or "no change"}
+    - 主角.职业.今日是否上班: ${true/false}
+    - 主角.职业.工作压力 [±5~25]: ${reason → delta or "no change"}
+    - 主角.职业.职业经验 [±5~50]: ${reason → delta or "no change"}
+    - 主角.经济.现金 / 银行存款: ${transaction occurred? amount → delta or "no change"}
+    - 主角.经济.本月已收入 / 本月已支出: ${delta or "no change"}
+
+    ### 苏梦璃
+    - 好感度经验 [±1~15 per reply]: ${reason → delta}
+    - 信任度 [±2~20]: ${reason → delta or "no change"}
+    - 关系阶段 [合法值: 陌生人/普通朋友/亲密朋友/暧昧/恋人/挚爱]: ${milestone event? new stage or "no change"}
+    - 当前情绪: ${new value}
+    - 今日是否见面: ${true/false}
+    - 连续未联系天数: ${reset to 0 or +1 or "no change"}
+    - 对主角的印象标签: ${new impression? insert key or "no change"}
+    - 重要共同记忆: ${memorable event? insert entry or "no change"}
+    - 主角评价: ${updated or "no change"}
+    - 内心OS: ${update all 4 fields}
+    - CG外观: ${changed? or "no change"}
+    - 直播状态 [合法值: 未开播/直播中/录制中/休息]: ${new value or "no change"}
+    - 家族压力值 [±5~20]: ${reason → delta or "no change"}
+    - NSFW.当前欲求程度 / 当前湿润程度 / 当前情欲温度: ${erotic scene? delta or "no change"}
+    - NSFW.是否已暴露最隐秘性癖: ${trigger condition met? true (also set 本回合刚暴露) or "no change"}
+
+    ### 柳清梦
+    - 好感度经验 [±1~15]: ${reason → delta}
+    - 信任度 [±2~20]: ${reason → delta or "no change"}
+    - 关系阶段 [合法值: 陌生人/普通朋友/亲密朋友/暧昧/恋人/挚爱]: ${milestone? or "no change"}
+    - 当前情绪: ${new value}
+    - 今日是否见面: ${true/false}
+    - 连续未联系天数: ${reset or +1}
+    - 对主角的印象标签 / 重要共同记忆 / 主角评价: ${update if applicable}
+    - 内心OS: ${update all 4 fields}
+    - CG外观: ${changed? or "no change"}
+    - 茶馆今日营业: ${true/false}
+    - 当前在鉴定的古董: ${new item or clear}
+    - 对主角的捉弄计划: ${new plan or clear}
+    - NSFW: ${erotic scene? update relevant fields or "no change"}
+
+    ### 林雨涵
+    - 好感度经验 [±1~15]: ${reason → delta}
+    - 信任度 [±2~20]: ${reason → delta or "no change"}
+    - 关系阶段 [合法值: 陌生人/普通朋友/亲密朋友/暧昧/恋人/挚爱]: ${milestone? or "no change"}
+    - 当前情绪: ${new value}
+    - 今日是否见面: ${true/false}
+    - 连续未联系天数: ${reset or +1}
+    - 对主角的印象标签 / 重要共同记忆 / 主角评价: ${update if applicable}
+    - 内心OS: ${update all 4 fields}
+    - CG外观: ${changed? or "no change"}
+    - 混乱值 [±5~20]: ${reason → delta or "no change"}
+    - 当前黑客任务 / 当前在研究的漏洞: ${update or clear}
+    - 父母关系紧张度 [±3~15]: ${reason → delta or "no change"}
+    - NSFW: ${erotic scene? update relevant fields or "no change"}
+
+    ### 墨瑾萱
+    - 好感度经验 [±1~15]: ${reason → delta}
+    - 信任度 [±2~20]: ${reason → delta or "no change"}
+    - 关系阶段 [合法值: 陌生人/普通朋友/亲密朋友/暧昧/恋人/挚爱]: ${milestone? or "no change"}
+    - 当前情绪: ${new value}
+    - 今日是否见面: ${true/false}
+    - 连续未联系天数: ${reset or +1}
+    - 对主角的印象标签 / 重要共同记忆 / 主角评价: ${update if applicable}
+    - 内心OS: ${update all 4 fields}
+    - CG外观: ${changed? or "no change"}
+    - 家族联系频率 [±3~15]: ${reason → delta or "no change"}
+    - 今日是否被异样眼光注视: ${true/false}
+    - NSFW: ${erotic scene? update relevant fields or "no change"}
+
+    ### 总结系统
+    - _总结系统.小总结: MUST insert one entry this reply, key = "${YYYYMMDD_NN}"
+      事件: ${≤50 chars}
+      各人物状态变化: ${name|好感度经验±N|信任度±N|关系阶段变化}
+      情感进展: ${≤30 chars}
+    - 汇总信号检查: ${需要汇总小总结=true? execute merge task. 需要汇总大总结=true? execute merge task.}
+    </Analysis>
+    <JSONPatch>
+    [
+      { "op": "replace", "path": "/世界/当前时间段", "value": "..." },
+      { "op": "delta", "path": "/主角/精力", "value": -10 },
+      { "op": "delta", "path": "/苏梦璃/好感度经验", "value": 5 },
+      { "op": "insert", "path": "/苏梦璃/对主角的印象标签/温柔", "value": true },
+      { "op": "insert", "path": "/_总结系统/小总结/20240301_01", "value": { "时间": "...", "地点": "...", "在场人物": ["..."], "事件": "...", "各人物状态变化": "...", "情感进展": "..." } },
+      ...
+    ]
+    </JSONPatch>
+    </UpdateVariable>

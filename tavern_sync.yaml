@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://testingcf.jsdelivr.net/gh/StageDog/tavern_sync/dist/schema/settings.zh.json
+
+# 在此填入 user 名称, 提示词中如果有这个名字则会被替换成 <user> 宏
+user名称: <user>
+
+# 在此填入新的"角色卡"、"世界书"或"预设"配置
+配置:
+  # 配置名称, 可以和酒馆中的不同. 你使用脚本时需要填写配置名称来指出用哪个配置, 因此尽量配置名称尽量简单点方便填写
+  都市恋:
+    类型: 角色卡
+    酒馆中的名称: 都市恋
+    本地文件路径: src/角色卡/index
+    导出文件路径: E:/muyootools-win32-x64/SillyTavern/data/default-user/characters/都市恋1.png
+
+  千年恋妖缘:
+    类型: 角色卡
+    酒馆中的名称: 千年恋妖缘
+    本地文件路径: 角色卡/index
+    导出文件路径: E:/muyootools-win32-x64/SillyTavern/data/default-user/characters/千年恋妖缘.png

@@ -173,9 +173,56 @@ function 构建汇总注入(stat_data: any): string | null {
   return 片段.join('\n\n────────\n\n');
 }
 
+function 构建角色卡思维链预设(stat_data: any): string {
+  const 世界 = _.get(stat_data, '世界', {});
+  const 主角 = _.get(stat_data, '主角', {});
+  const 当前地点ID = _.get(主角, '当前地点ID', _.get(主角, '当前位置', '未知地点'));
+  const 当前地点名 = _.get(stat_data, `_城市地图.地点列表.${当前地点ID}.名称`, 当前地点ID);
+  const npc摘要 = NPC列表
+    .map(npc名 => {
+      const npc = _.get(stat_data, npc名);
+      if (!npc) return '';
+      return [
+        `${npc名}:`,
+        `地点=${_.get(npc, '当前地点ID', '未知')}`,
+        `关系=${_.get(npc, '关系阶段', '陌生人')}`,
+        `好感Lv=${_.get(npc, '好感度等级', 1)}`,
+        `信任=${_.get(npc, '信任度', 0)}`,
+        `情绪=${_.get(npc, '当前情绪', '平静')}`,
+      ].join(' ');
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  return [
+    '【角色卡专用思维链预设 · 用户不可见】',
+    '你必须先在 <thinking> 内完成简短推演，但不要泄露推理过程给用户。thinking 只服务于生成正文和变量更新。',
+    '',
+    '当前基础状态：',
+    `- 时间：${_.get(世界, '当前日期', '')} ${_.get(世界, '当前星期', '')} ${_.get(世界, '当前时间段', '')}`,
+    `- 天气：${_.get(世界, '天气', '')} ${_.get(世界, '气温', '')}`,
+    `- 主角地点：${当前地点名}`,
+    `- 主角状态：体力=${_.get(主角, '体力', '未知')} 金钱=${_.get(主角, '金钱', '未知')} 心情=${_.get(主角, '心情', '未知')}`,
+    npc摘要 ? `- NPC快照：\n${npc摘要}` : '- NPC快照：暂无',
+    '',
+    'thinking 内按以下顺序检查：',
+    '1. 先判断用户输入要推进什么：对话、行动、移动、短信、电话、回忆、关系推进或总结任务。',
+    '2. 再判断现场有哪些 NPC 能合理出现；不在同场景的 NPC 只能通过短信、电话或 npc_scene 间接出现。',
+    '3. 检查好感度、信任度、关系阶段、情绪、背景档案、NSFW 状态，避免角色突然越界或无理由坦白。',
+    '4. 安排正文节奏：场景感 → 动作/表情 → 对话 → 情绪余波。正文必须自然，不要像变量报告。',
+    '5. 若状态有变化，在 <state> 输出最小必要 JSON；不要把没有变化的字段重复写入。',
+    '6. 如果需要隐藏给用户看的辅助内容，使用 <context>/<lenitxt>/<state>/<wine>，正文只放在 <story>。',
+    '',
+    '正文风格要求：',
+    '- 允许使用 Markdown：**重点**、*轻微强调*、`细节标记`、> 引用、列表、代码块。',
+    '- 可以使用 <!--...--> 写临时备注；这类内容会被界面隐藏，用户不可见。',
+    '- 不要把 thinking、context、state、lenitxt、wine 的内容写到 story 外面或正文里解释。',
+  ].join('\n');
+}
+
 function 清理叙事正文(text: string) {
   return 标准化标签(text)
-    .replace(/```(?:\w+)?/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
     .replace(/<call\b[^>]*\/>/gi, '')
     .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
@@ -242,6 +289,8 @@ $(async () => {
 
     const 注入片段: string[] = [];
 
+    注入片段.push(构建角色卡思维链预设(stat_data));
+
     // NPC 状态快照注入（距离过滤 + NSFW 过滤）
     const npc状态 = 构建NPC状态注入(stat_data);
     if (npc状态) 注入片段.push(npc状态);
@@ -274,7 +323,7 @@ $(async () => {
       '',
       '第一步：思维链（必须最先输出，用户不可见）',
       '<thinking>',
-      '分析当前局势、NPC心理、剧情走向、数值变化预判。',
+      '按“角色卡专用思维链预设”完成简短推演：局势、NPC心理、剧情走向、变量变化、输出格式。',
       '</thinking>',
       '',
       '第二步：状态摘要（用户不可见）',
@@ -321,7 +370,7 @@ $(async () => {
   // ── AI 回复完成：解析标签 + 写消息队列 + 清除标记 ──────────
   eventOn(tavern_events.MESSAGE_RECEIVED, async (message_id: number) => {
     const chat = getChatMessages(message_id);
-    const raw = 标准化标签(chat[0]?.message ?? '');
+    const raw = 标准化标签(chat[0]?.message ?? '').replace(/<!--[\s\S]*?-->/g, '');
 
     // 解析标签
     const queue: any[] = [];
