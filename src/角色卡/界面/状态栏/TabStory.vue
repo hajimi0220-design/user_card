@@ -67,6 +67,7 @@ function normalizeTags(text: string) {
 function cleanupNarrative(text: string) {
   return normalizeTags(text)
     .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<StatusPlaceHolderImpl\s*\/>/gi, '')
     .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
     .replace(/<call\b[^>]*\/>/gi, '')
     .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')

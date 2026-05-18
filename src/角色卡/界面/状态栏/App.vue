@@ -61,6 +61,9 @@
         :disabled="isGenerating"
         @keydown.enter.exact.prevent="sendMessage"
       />
+      <button class="regen-btn" :disabled="isGenerating || !canRegenerate" @click="regenerateCurrentFloor" title="重新生文">
+        <i class="fas fa-rotate-right" />
+      </button>
       <button class="send-btn" :disabled="isGenerating || !inputText.trim()" @click="sendMessage">
         <i v-if="isGenerating" class="fas fa-circle-notch fa-spin" />
         <i v-else class="fas fa-paper-plane" />
@@ -321,6 +324,7 @@ const finishedGenerationIds = new Set<string>();
 const NARRATIVE_CACHE_PREFIX = 'user_card.lastNarrative';
 const lastNarrative = ref(loadCachedNarrative());
 const showDebug = ref(false);
+const lastUserInput = ref('');
 
 // thinking 阶段：已开始生成但还没出现 <story> 标签
 const isThinking = computed(() =>
@@ -329,12 +333,15 @@ const isThinking = computed(() =>
 const debugRaw = computed(() => stripHiddenComments(streamingRaw.value || lastRaw.value));
 
 function stripHiddenComments(text: string) {
-  return String(text ?? '').replace(/<!--[\s\S]*?-->/g, '');
+  return String(text ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<StatusPlaceHolderImpl\s*\/>/gi, '');
 }
 
 function cleanupNarrative(text: string) {
   return normalizeTags(text)
     .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<StatusPlaceHolderImpl\s*\/>/gi, '')
     .replace(/<sms\b[^>]*>[\s\S]*?<\/sms>/gi, '')
     .replace(/<call\b[^>]*\/>/gi, '')
     .replace(/<call\b[^>]*>[\s\S]*?<\/call>/gi, '')
@@ -388,6 +395,16 @@ function rememberNarrative(text: string) {
     localStorage.setItem(narrativeCacheKey(), narrative);
   } catch { /* ignore storage quota/private mode errors */ }
 }
+
+function resolveLatestUserInput() {
+  const latestUserMessage = getChatMessages('0-{{lastMessageId}}', { role: 'user', hide_state: 'unhidden' })
+    .slice()
+    .reverse()
+    .find(message => typeof message.message === 'string' && message.message.trim());
+  return latestUserMessage?.message?.trim() ?? '';
+}
+
+const canRegenerate = computed(() => !!(lastUserInput.value || resolveLatestUserInput()));
 
 function appendNarrativeHistory(stat_data: any, narrativeOnly: string, id = Date.now()) {
   const hist: any[] = _.get(stat_data, '_叙事历史', []);
@@ -455,6 +472,10 @@ watch(
 );
 
 onMounted(() => {
+  lastUserInput.value = resolveLatestUserInput();
+});
+
+onMounted(() => {
   eventOn(iframe_events.GENERATION_STARTED, (generationId: string) => {
     if (!shouldHandleGeneration(generationId)) return;
     isGenerating.value = true;
@@ -471,16 +492,15 @@ onMounted(() => {
   });
 });
 
-async function sendMessage() {
-  const text = inputText.value.trim();
-  if (!text || isGenerating.value) return;
-  inputText.value = '';
+async function generateNarrativeFromInput(text: string) {
+  const trimmedText = text.trim();
+  if (!trimmedText || isGenerating.value) return;
   const generationId = `user-card-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   activeGenerationId.value = generationId;
   isGenerating.value = true;
   streamingRaw.value = '';
   try {
-    const result = await generate({ generation_id: generationId, user_input: text, should_stream: true, max_chat_history: 0 });
+    const result = await generate({ generation_id: generationId, user_input: trimmedText, should_stream: true, max_chat_history: 0 });
     const raw = typeof result === 'string' ? result : result.content ?? '';
     await finishGeneration(raw, generationId);
   } catch (error) {
@@ -488,6 +508,21 @@ async function sendMessage() {
     if (activeGenerationId.value === generationId) activeGenerationId.value = null;
     console.error(error);
   }
+}
+
+async function sendMessage() {
+  const text = inputText.value.trim();
+  if (!text || isGenerating.value) return;
+  inputText.value = '';
+  lastUserInput.value = text;
+  await generateNarrativeFromInput(text);
+}
+
+async function regenerateCurrentFloor() {
+  const text = lastUserInput.value || resolveLatestUserInput();
+  if (!text || isGenerating.value) return;
+  lastUserInput.value = text;
+  await generateNarrativeFromInput(text);
 }
 
 // ── 历史楼层 ──────────────────────────────────────────────────
@@ -612,6 +647,19 @@ async function rollbackTo(idx: number) {
   color: #fff; font-size: 13px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: opacity 0.15s;
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+.regen-btn {
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--uc-accent, #a78bfa) 35%, transparent);
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--uc-accent, #a78bfa) 14%, var(--uc-panel-bg, #1a1028));
+  color: var(--uc-accent, #d8b4fe); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--uc-accent, #a78bfa) 24%, var(--uc-panel-bg, #1a1028));
+    transform: translateY(-1px);
+  }
   &:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 

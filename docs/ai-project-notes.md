@@ -19,6 +19,8 @@ This file records repo-specific decisions that future AI agents should follow wi
 - Keep the prose clean, but preserve the ability for the user to inspect:
   - `Analysis`
   - formatted `JSONPatch`
+- The placeholder tag `<StatusPlaceHolderImpl/>` is an integration placeholder for the status-bar injection rule, not user-facing prose.
+- Frontend narrative cleanup should always hide `<StatusPlaceHolderImpl/>` if it appears in greetings, first messages, or raw generated text.
 - Related UI file:
   `src/角色卡/界面/状态栏/TabStory.vue`
 
