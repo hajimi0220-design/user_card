@@ -30,6 +30,8 @@ The script follows the successful sequence:
 ```powershell
 git add -A
 git commit -m "<message>"
+git fetch user_card main
+git rebase user_card/main
 git push -u user_card HEAD:main
 ```
 
@@ -37,4 +39,5 @@ git push -u user_card HEAD:main
 
 - Push to `user_card/main`, not `origin/main`.
 - `origin/main` is a different history and should not be used for this upload flow.
-- If GitHub rejects the push because the remote has new commits, fetch/rebase or merge deliberately before uploading.
+- The GitHub Action may create a `[bot] bundle` commit after upload. The helper script fetches and rebases before pushing so this does not become a repeated manual step.
+- If the rebase reports conflicts, resolve them deliberately, then continue with `git rebase --continue` and push again.
