@@ -30,14 +30,24 @@ The script follows the successful sequence:
 ```powershell
 git add -A
 git commit -m "<message>"
-git fetch user_card main
-git rebase user_card/main
 git push -u user_card HEAD:main
+```
+
+If the normal push is rejected because the remote only contains the GitHub Actions `[bot] bundle` commit, use:
+
+```powershell
+.\scripts\upload_user_card.ps1 -ForceWithLease
+```
+
+That runs:
+
+```powershell
+git push --force-with-lease user_card HEAD:main
 ```
 
 ## Important notes
 
 - Push to `user_card/main`, not `origin/main`.
 - `origin/main` is a different history and should not be used for this upload flow.
-- The GitHub Action may create a `[bot] bundle` commit after upload. The helper script fetches and rebases before pushing so this does not become a repeated manual step.
-- If the rebase reports conflicts, resolve them deliberately, then continue with `git rebase --continue` and push again.
+- The GitHub Action may create a `[bot] bundle` commit after upload. That commit can contain paths that are invalid on Windows, so rebasing onto it may fail locally.
+- Use `-ForceWithLease` only for this known generated bundle conflict on `user_card/main`, not for unrelated remote work.
