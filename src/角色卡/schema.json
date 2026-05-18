@@ -1835,6 +1835,43 @@
           "text"
         ]
       }
+    },
+    "_变量更新可视化": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "analysis": {
+          "default": "",
+          "type": "string"
+        },
+        "jsonPatch": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "value": {},
+              "from": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "op",
+              "path"
+            ]
+          }
+        },
+        "ts": {
+          "default": 0,
+          "type": "number"
+        }
+      }
     }
   },
   "$defs": {

@@ -822,4 +822,16 @@ export const Schema = z.object({
     text: z.string(),
   })).prefault([]),
 
+  // ── 变量更新可视化（前端折叠展示最近一次 UpdateVariable）
+  _变量更新可视化: z.object({
+    analysis: z.string().prefault(''),
+    jsonPatch: z.array(z.object({
+      op: z.string(),
+      path: z.string(),
+      value: z.any().optional(),
+      from: z.string().optional(),
+    })).prefault([]),
+    ts: z.number().prefault(0),
+  }).prefault({}),
+
 });

@@ -1,3 +1,4 @@
+import { parseString } from '@util/common';
 import { Schema } from '../../schema';
 
 // ══════════════════════════════════════════════════════════════
@@ -210,8 +211,9 @@ function 构建角色卡思维链预设(stat_data: any): string {
     '2. 再判断现场有哪些 NPC 能合理出现；不在同场景的 NPC 只能通过短信、电话或 npc_scene 间接出现。',
     '3. 检查好感度、信任度、关系阶段、情绪、背景档案、NSFW 状态，避免角色突然越界或无理由坦白。',
     '4. 安排正文节奏：场景感 → 动作/表情 → 对话 → 情绪余波。正文必须自然，不要像变量报告。',
-    '5. 若状态有变化，在 <state> 输出最小必要 JSON；不要把没有变化的字段重复写入。',
-    '6. 如果需要隐藏给用户看的辅助内容，使用 <context>/<lenitxt>/<state>/<wine>，正文只放在 <story>。',
+    '5. 若变量有变化，必须在正文后紧接着输出 <UpdateVariable>，其中包含 <Analysis> 和 <JSONPatch>。',
+    '6. <JSONPatch> 必须是合法 JSON 数组；数值优先用 delta，新增字段或数组项用 insert。',
+    '7. 如果需要隐藏给用户看的辅助内容，使用 <context>/<lenitxt>/<wine>，正文只放在 <story>。',
     '',
     '正文风格要求：',
     '- 允许使用 Markdown：**重点**、*轻微强调*、`细节标记`、> 引用、列表、代码块。',
@@ -262,6 +264,110 @@ function 获取ChatStatData() {
     _.set(variables, 'stat_data', Schema.parse({}));
   }
   return { variables, stat_data: _.get(variables, 'stat_data') };
+}
+
+type JsonPatchOperation = {
+  op: 'replace' | 'delta' | 'insert' | 'remove' | 'move';
+  path: string;
+  value?: any;
+  from?: string;
+};
+
+function 规范Patch路径(path: string) {
+  if (!path) return '';
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function Patch路径转对象路径(path: string) {
+  return 规范Patch路径(path)
+    .split('/')
+    .slice(1)
+    .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .join('.');
+}
+
+function 获取Patch父级(path: string) {
+  const parts = 规范Patch路径(path).split('/').slice(1);
+  const key = parts.pop() ?? '';
+  return {
+    key,
+    parentPath: parts.map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~')).join('.'),
+  };
+}
+
+function 应用JSONPatch到变量(stat_data: any, operations: JsonPatchOperation[]) {
+  for (const operation of operations) {
+    const op = operation?.op;
+    const path = 规范Patch路径(operation?.path ?? '');
+    if (!op || !path) continue;
+
+    if (op === 'move') {
+      const fromPath = Patch路径转对象路径(operation.from ?? '');
+      const toPath = Patch路径转对象路径(path);
+      if (!fromPath || !toPath) continue;
+      const value = _.get(stat_data, fromPath);
+      _.unset(stat_data, fromPath);
+      _.set(stat_data, toPath, value);
+      continue;
+    }
+
+    if (op === 'remove') {
+      _.unset(stat_data, Patch路径转对象路径(path));
+      continue;
+    }
+
+    if (op === 'delta') {
+      const objectPath = Patch路径转对象路径(path);
+      const current = Number(_.get(stat_data, objectPath, 0));
+      const delta = Number(operation.value ?? 0);
+      _.set(stat_data, objectPath, current + delta);
+      continue;
+    }
+
+    if (op === 'replace') {
+      _.set(stat_data, Patch路径转对象路径(path), operation.value);
+      continue;
+    }
+
+    if (op === 'insert') {
+      const { parentPath, key } = 获取Patch父级(path);
+      const parent = parentPath ? _.get(stat_data, parentPath) : stat_data;
+      if (Array.isArray(parent)) {
+        if (key === '-') {
+          parent.push(operation.value);
+          continue;
+        }
+        const index = Number(key);
+        if (Number.isInteger(index) && index >= 0 && index <= parent.length) {
+          parent.splice(index, 0, operation.value);
+        }
+        continue;
+      }
+      _.set(stat_data, Patch路径转对象路径(path), operation.value);
+    }
+  }
+}
+
+function 提取变量更新(raw: string) {
+  const normalized = 标准化标签(raw);
+  const updateMatch = /<UpdateVariable\b[^>]*>([\s\S]*?)<\/UpdateVariable>/i.exec(normalized);
+  const updateContent = updateMatch?.[1] ?? '';
+  const analysis = /<Analysis\b[^>]*>([\s\S]*?)<\/Analysis>/i.exec(updateContent)?.[1]?.trim() ?? '';
+  const patchRaw = /<JSONPatch\b[^>]*>([\s\S]*?)<\/JSONPatch>/i.exec(updateContent)?.[1]?.trim() ?? '';
+  let jsonPatch: JsonPatchOperation[] = [];
+
+  if (patchRaw) {
+    try {
+      const parsed = parseString(patchRaw);
+      if (Array.isArray(parsed)) {
+        jsonPatch = parsed as JsonPatchOperation[];
+      }
+    } catch (error) {
+      console.warn('解析 JSONPatch 失败', error);
+    }
+  }
+
+  return { hasUpdateVariable: !!updateMatch, analysis, jsonPatch };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -343,8 +449,15 @@ $(async () => {
       '第四步：摘要（用户不可见）',
       '<lenitxt>本回合50字内事件摘要</lenitxt>',
       '',
-      '第五步：数值更新（有变化时必须输出，用户不可见）',
-      '<state>{"NPC名":{"字段":"值"},"主角":{"字段":值}}</state>',
+      '第五步：变量更新（有变化时必须输出，紧跟在正文后）',
+      '<UpdateVariable>',
+      '<Analysis>',
+      '逐项说明为什么更新；没有变化的字段写 no change。',
+      '</Analysis>',
+      '<JSONPatch>',
+      '[{"op":"delta","path":"/主角/精力","value":-5}]',
+      '</JSONPatch>',
+      '</UpdateVariable>',
       '',
       '可选：小剧场/番外',
       '<wine>小剧场或番外内容（用户不可见，仅供参考）</wine>',
@@ -378,7 +491,7 @@ $(async () => {
     const callRe = /<call\s+from="([^"]+)"(?:\s+action="([^"]+)")?[^/]*\/>/g;
     const npcSceneRe = /<npc_scene\s+from="([^"]+)">([\s\S]*?)<\/npc_scene>/g;
     const storyRe = /<story\b[^>]*>([\s\S]*?)(?:<\/story>|$)/i;
-    const stateRe = /<state>([\s\S]*?)<\/state>/;
+    const { hasUpdateVariable, analysis: variableUpdateAnalysis, jsonPatch } = 提取变量更新(raw);
 
     let m: RegExpExecArray | null;
     const storyMatch = storyRe.exec(raw);
@@ -401,13 +514,6 @@ $(async () => {
     }
 
     const narrativeOnly = 提取叙事正文(raw);
-    let statePatch: any = null;
-    if (stateMatch) {
-      try {
-        statePatch = JSON.parse(stateMatch[1]);
-      } catch { /* ignore malformed JSON */ }
-    }
-
     // 重新读取最新 chat 变量再写入，避免并发的 iframe 生成收尾被旧快照覆盖。
     const { variables, stat_data } = 获取ChatStatData();
     let dirty = false;
@@ -433,8 +539,16 @@ $(async () => {
         dirty = true;
       }
     }
-    if (statePatch) {
-      _.merge(stat_data, statePatch);
+    if (jsonPatch.length > 0) {
+      应用JSONPatch到变量(stat_data, jsonPatch);
+      dirty = true;
+    }
+    if (hasUpdateVariable) {
+      _.set(stat_data, '_变量更新可视化', {
+        analysis: variableUpdateAnalysis,
+        jsonPatch,
+        ts: Date.now(),
+      });
       dirty = true;
     }
 

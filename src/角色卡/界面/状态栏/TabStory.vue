@@ -11,6 +11,26 @@
       <p v-else class="narrative-empty">（等待生成…）</p>
     </div>
 
+    <details v-if="updateVariableCard" class="update-card">
+      <summary class="update-summary">
+        <div class="update-summary-main">
+          <span class="update-badge">Variable Update</span>
+          <span class="update-title">变量更新详情</span>
+        </div>
+        <span class="update-hint">展开查看 Analysis / JSONPatch</span>
+      </summary>
+      <div class="update-body">
+        <section v-if="updateVariableCard.analysis" class="update-section">
+          <div class="update-section-title">Analysis</div>
+          <div class="update-analysis" v-html="updateAnalysisHtml" />
+        </section>
+        <section v-if="updateVariableCard.jsonPatchPretty" class="update-section">
+          <div class="update-section-title">JSONPatch</div>
+          <pre class="update-code"><code>{{ updateVariableCard.jsonPatchPretty }}</code></pre>
+        </section>
+      </div>
+    </details>
+
     <!-- NPC 特殊场景折叠栏 -->
     <template v-if="npcScenes.length">
       <details v-for="scene in npcScenes" :key="scene.npc" class="npc-scene">
@@ -208,6 +228,43 @@ function renderMarkdown(text: string) {
 
 const displayNarrativeHtml = computed(() => renderMarkdown(displayNarrative.value));
 const npcScenes = computed(() => (props.d as any)._叙事NPC场景 ?? []);
+
+function extractUpdateVariable(raw: string) {
+  const normalized = normalizeTags(raw);
+  const content = /<UpdateVariable\b[^>]*>([\s\S]*?)<\/UpdateVariable>/i.exec(normalized)?.[1] ?? '';
+  if (!content.trim()) return null;
+
+  const analysis = /<Analysis\b[^>]*>([\s\S]*?)<\/Analysis>/i.exec(content)?.[1]?.trim() ?? '';
+  const jsonPatchRaw = /<JSONPatch\b[^>]*>([\s\S]*?)<\/JSONPatch>/i.exec(content)?.[1]?.trim() ?? '';
+  let jsonPatchPretty = jsonPatchRaw;
+
+  if (jsonPatchRaw) {
+    try {
+      jsonPatchPretty = JSON.stringify(JSON.parse(jsonPatchRaw), null, 2);
+    } catch {
+      jsonPatchPretty = jsonPatchRaw;
+    }
+  }
+
+  return {
+    analysis,
+    jsonPatchPretty,
+  };
+}
+
+const updateVariableCard = computed(() => {
+  const fromRaw = extractUpdateVariable(props.streamingRaw || props.lastRaw);
+  if (fromRaw?.analysis || fromRaw?.jsonPatchPretty) return fromRaw;
+
+  const saved = (props.d as any)._变量更新可视化;
+  if (!saved) return null;
+  return {
+    analysis: typeof saved.analysis === 'string' ? saved.analysis : '',
+    jsonPatchPretty: Array.isArray(saved.jsonPatch) ? JSON.stringify(saved.jsonPatch, null, 2) : '',
+  };
+});
+
+const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.value?.analysis ?? ''));
 </script>
 
 <style lang="scss" scoped>
@@ -288,6 +345,107 @@ const npcScenes = computed(() => (props.d as any)._叙事NPC场景 ?? []);
   background: var(--uc-story-bg, rgba(255,255,255,0.03));
   border: 1px solid var(--uc-border, rgba(255,255,255,0.07));
   overflow: hidden;
+}
+.update-card {
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--uc-accent, #a78bfa) 12%, transparent), transparent 60%),
+    color-mix(in srgb, var(--uc-panel-bg, #1a1028) 92%, black 8%);
+  border: 1px solid color-mix(in srgb, var(--uc-accent, #a78bfa) 22%, var(--uc-border, rgba(255,255,255,0.08)));
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+.update-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--uc-text, #d4cce8);
+  &::-webkit-details-marker { display: none; }
+}
+.update-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.update-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #f8f5ff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--uc-accent, #a78bfa) 80%, white 8%), color-mix(in srgb, var(--uc-accent, #a78bfa) 55%, black 10%));
+}
+.update-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--uc-text, #efe8ff);
+}
+.update-hint {
+  font-size: 11px;
+  color: var(--uc-muted, #8d80aa);
+  white-space: nowrap;
+}
+.update-body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.update-section {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--uc-story-bg, #171222) 80%, black 10%);
+  border: 1px solid var(--uc-border, rgba(255,255,255,0.08));
+  overflow: hidden;
+}
+.update-section-title {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--uc-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--uc-accent, #a78bfa) 10%, transparent);
+  border-bottom: 1px solid var(--uc-border, rgba(255,255,255,0.06));
+}
+.update-analysis {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--uc-text, #ddd6f3);
+  :deep(p) { margin: 0 0 0.75em; white-space: pre-wrap; }
+  :deep(p:last-child) { margin-bottom: 0; }
+  :deep(ul) { margin: 6px 0 0 18px; }
+  :deep(h3), :deep(h4), :deep(h5) {
+    margin: 0 0 8px;
+    color: var(--uc-accent, #a78bfa);
+    font-size: 1em;
+  }
+  :deep(strong) { color: var(--uc-md-bold, #f9a8d4); }
+  :deep(em) { color: var(--uc-md-italic, #93c5fd); }
+  :deep(code) {
+    color: var(--uc-md-code, #86efac);
+    background: var(--uc-md-code-bg, #10151d);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+}
+.update-code {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #d6ffe8;
+  background:
+    linear-gradient(180deg, rgba(16, 21, 29, 0.96), rgba(12, 16, 24, 0.98));
+  font-family: 'Courier New', monospace;
 }
 .scene-summary {
   padding: 10px 14px; font-size: 12px; font-weight: 600;
