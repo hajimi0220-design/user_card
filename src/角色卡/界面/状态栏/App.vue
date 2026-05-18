@@ -325,6 +325,7 @@ const NARRATIVE_CACHE_PREFIX = 'user_card.lastNarrative';
 const lastNarrative = ref(loadCachedNarrative());
 const showDebug = ref(false);
 const lastUserInput = ref('');
+const currentChatId = ref<string>('');
 
 // thinking 阶段：已开始生成但还没出现 <story> 标签
 const isThinking = computed(() =>
@@ -384,6 +385,31 @@ function loadCachedNarrative() {
     return localStorage.getItem(narrativeCacheKey()) ?? '';
   } catch {
     return '';
+  }
+}
+
+function resetRuntimeStateForChat() {
+  streamingRaw.value = '';
+  lastRaw.value = '';
+  lastNarrative.value = '';
+  lastUserInput.value = '';
+  activeGenerationId.value = null;
+  finishedGenerationIds.clear();
+  inputText.value = '';
+  showDebug.value = false;
+  showHistory.value = false;
+  expanded.value = new Set<number>();
+}
+
+function syncChatState() {
+  let chatId = 'unknown';
+  try {
+    chatId = SillyTavern.getCurrentChatId?.() || chatId;
+  } catch { /* ignore unavailable SillyTavern context */ }
+  if (chatId !== currentChatId.value) {
+    currentChatId.value = chatId;
+    resetRuntimeStateForChat();
+    lastNarrative.value = loadCachedNarrative();
   }
 }
 
@@ -491,6 +517,20 @@ onMounted(() => {
     void finishGeneration(text, generationId);
   });
 });
+
+watch(
+  () => {
+    try {
+      return SillyTavern.getCurrentChatId?.() || '';
+    } catch {
+      return '';
+    }
+  },
+  () => {
+    syncChatState();
+  },
+  { immediate: true },
+);
 
 async function generateNarrativeFromInput(text: string) {
   const trimmedText = text.trim();

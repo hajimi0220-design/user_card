@@ -101,8 +101,16 @@ const savedNarrative = computed(() =>
 );
 
 const displayNarrative = computed(() => {
+  const currentNarrative = (props.d as any)._叙事内容;
+  const currentHistory = (props.d as any)._叙事历史;
+  const hasPersistedNarrative = typeof currentNarrative === 'string' && currentNarrative.trim();
+  const hasHistoryNarrative = Array.isArray(currentHistory) && currentHistory.length > 0;
+
   if (props.isGenerating && props.streamingRaw) {
     return extractNarrative(props.streamingRaw) || savedNarrative.value;
+  }
+  if (!hasPersistedNarrative && !hasHistoryNarrative && !props.lastRaw.trim()) {
+    return '';
   }
   return savedNarrative.value;
 });
