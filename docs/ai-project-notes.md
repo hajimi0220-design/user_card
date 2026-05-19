@@ -24,6 +24,19 @@ This file records repo-specific decisions that future AI agents should follow wi
 - Related UI file:
   `src/角色卡/界面/状态栏/TabStory.vue`
 
+## Local path alignment
+
+- The local character card source is:
+  `src/角色卡/index.yaml`
+- The frontend status-bar entry loaded by the card should point to:
+  `dist/角色卡/界面/状态栏/index.html`
+- The script entries loaded by the card should point to:
+  `dist/角色卡/脚本/变量结构/index.js`
+  `dist/角色卡/脚本/剧情机制/index.js`
+- For this project, the first message should include:
+  `<StatusPlaceHolderImpl/>`
+  so the status-bar frontend can be injected on first render.
+
 ## Persistence expectations
 
 - Narrative content must persist after refresh.

@@ -6,8 +6,10 @@
         <i class="fas fa-circle-notch fa-spin" />
         <span>思考中…</span>
       </div>
-      <div v-if="displayNarrative" class="narrative-text" v-html="displayNarrativeHtml" />
-      <span v-if="displayNarrative && isGenerating && !isThinking" class="cursor-blink" />
+      <template v-if="displayNarrative">
+        <div class="narrative-text" v-html="displayNarrativeHtml" />
+        <span v-if="isGenerating && !isThinking" class="cursor-blink" />
+      </template>
       <p v-else class="narrative-empty">（等待生成…）</p>
     </div>
 
@@ -56,12 +58,12 @@ const props = defineProps<{
   lastNarrative: string;
 }>();
 
-const isThinking = computed(() =>
-  props.isGenerating && !!props.streamingRaw && !/<story\b/i.test(props.streamingRaw)
-);
+const isThinking = computed(() => props.isGenerating && !!props.streamingRaw && !/<story\b/i.test(props.streamingRaw));
 
 function normalizeTags(text: string) {
-  return String(text ?? '').replace(/＜/g, '<').replace(/＞/g, '>');
+  return String(text ?? '')
+    .replace(/＜/g, '<')
+    .replace(/＞/g, '>');
 }
 
 function cleanupNarrative(text: string) {
@@ -96,8 +98,13 @@ const historyNarrative = computed(() => {
   return typeof latest === 'string' ? latest.trim() : '';
 });
 
-const savedNarrative = computed(() =>
-  (props.d as any)._叙事内容 || props.lastNarrative || historyNarrative.value || extractNarrative(props.lastRaw) || ''
+const savedNarrative = computed(
+  () =>
+    (props.d as any)._叙事内容 ||
+    props.lastNarrative ||
+    historyNarrative.value ||
+    extractNarrative(props.lastRaw) ||
+    '',
 );
 
 const displayNarrative = computed(() => {
@@ -157,7 +164,9 @@ function applyInlineMarkdown(text: string) {
 }
 
 function renderMarkdown(text: string) {
-  const normalized = normalizeTags(text).replace(/<!--[\s\S]*?-->/g, '').replace(/\r\n?/g, '\n');
+  const normalized = normalizeTags(text)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\r\n?/g, '\n');
   const blocks: string[] = [];
   const lines = normalized.split('\n');
   let paragraph: string[] = [];
@@ -181,7 +190,9 @@ function renderMarkdown(text: string) {
     const fence = /^```([\w-]*)\s*$/.exec(line);
     if (fence) {
       if (inCode) {
-        blocks.push(`<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+        blocks.push(
+          `<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`,
+        );
         inCode = false;
         codeLang = '';
         codeLines = [];
@@ -229,7 +240,9 @@ function renderMarkdown(text: string) {
   flushParagraph();
   flushList();
   if (inCode) {
-    blocks.push(`<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+    blocks.push(
+      `<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`,
+    );
   }
 
   return blocks.join('');
@@ -277,33 +290,54 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
 </script>
 
 <style lang="scss" scoped>
-.story-tab { display: flex; flex-direction: column; gap: 10px; }
+.story-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .narrative-box {
   padding: 14px;
-  background: var(--uc-story-bg, rgba(255,255,255,0.03));
+  background: var(--uc-story-bg, rgba(255, 255, 255, 0.03));
   border-left: 3px solid var(--uc-accent, #a78bfa);
   border-radius: 0 10px 10px 0;
   min-height: 60px;
 }
 .thinking-bar {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--uc-muted, #7c6f96); margin-bottom: 8px;
-  i { color: var(--uc-accent, #a78bfa); }
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--uc-muted, #7c6f96);
+  margin-bottom: 8px;
+  i {
+    color: var(--uc-accent, #a78bfa);
+  }
 }
 .narrative-text {
   font-size: 13px;
   line-height: 1.9;
   color: var(--uc-text, #d4cce8);
   word-break: break-word;
-  :deep(p) { margin: 0 0 0.75em; white-space: pre-wrap; }
-  :deep(p:last-child) { margin-bottom: 0; }
-  :deep(strong) { color: var(--uc-md-bold, #f9a8d4); font-weight: 700; }
-  :deep(em) { color: var(--uc-md-italic, #93c5fd); font-style: italic; }
+  :deep(p) {
+    margin: 0 0 0.75em;
+    white-space: pre-wrap;
+  }
+  :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+  :deep(strong) {
+    color: var(--uc-md-bold, #f9a8d4);
+    font-weight: 700;
+  }
+  :deep(em) {
+    color: var(--uc-md-italic, #93c5fd);
+    font-style: italic;
+  }
   :deep(code) {
     color: var(--uc-md-code, #86efac);
     background: var(--uc-md-code-bg, #10151d);
-    border: 1px solid var(--uc-border, rgba(255,255,255,0.08));
+    border: 1px solid var(--uc-border, rgba(255, 255, 255, 0.08));
     border-radius: 4px;
     padding: 1px 4px;
     font-family: 'Courier New', monospace;
@@ -315,7 +349,7 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
     overflow-x: auto;
     border-radius: 8px;
     background: var(--uc-md-code-bg, #10151d);
-    border: 1px solid var(--uc-border, rgba(255,255,255,0.08));
+    border: 1px solid var(--uc-border, rgba(255, 255, 255, 0.08));
   }
   :deep(pre code) {
     padding: 0;
@@ -330,29 +364,56 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
     border-left: 2px solid var(--uc-accent, #a78bfa);
     color: color-mix(in srgb, var(--uc-text, #d4cce8) 78%, white 10%);
   }
-  :deep(ul) { margin: 6px 0 8px 18px; }
-  :deep(h3), :deep(h4), :deep(h5) {
+  :deep(ul) {
+    margin: 6px 0 8px 18px;
+  }
+  :deep(h3),
+  :deep(h4),
+  :deep(h5) {
     margin: 10px 0 6px;
     color: var(--uc-accent, #a78bfa);
     font-size: 1.05em;
   }
-  :deep(.quote-double) { color: var(--uc-quote-double, #fbbf24); }
-  :deep(.quote-single) { color: var(--uc-quote-single, #5eead4); }
-  :deep(.quote-bracket) { color: var(--uc-quote-bracket, #c4b5fd); }
-  :deep(.quote-chinese) { color: var(--uc-quote-chinese, #fb7185); }
+  :deep(.quote-double) {
+    color: var(--uc-quote-double, #fbbf24);
+  }
+  :deep(.quote-single) {
+    color: var(--uc-quote-single, #5eead4);
+  }
+  :deep(.quote-bracket) {
+    color: var(--uc-quote-bracket, #c4b5fd);
+  }
+  :deep(.quote-chinese) {
+    color: var(--uc-quote-chinese, #fb7185);
+  }
 }
-.narrative-empty { font-size: 12px; color: var(--uc-muted, #4a3f60); }
+.narrative-empty {
+  font-size: 12px;
+  color: var(--uc-muted, #4a3f60);
+}
 .cursor-blink {
-  display: inline-block; width: 2px; height: 13px;
-  background: var(--uc-accent, #a78bfa); margin-left: 2px; vertical-align: middle;
+  display: inline-block;
+  width: 2px;
+  height: 13px;
+  background: var(--uc-accent, #a78bfa);
+  margin-left: 2px;
+  vertical-align: middle;
   animation: blink 1s step-end infinite;
 }
-@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
 
 .npc-scene {
   border-radius: 10px;
-  background: var(--uc-story-bg, rgba(255,255,255,0.03));
-  border: 1px solid var(--uc-border, rgba(255,255,255,0.07));
+  background: var(--uc-story-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--uc-border, rgba(255, 255, 255, 0.07));
   overflow: hidden;
 }
 .update-card {
@@ -360,7 +421,7 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--uc-accent, #a78bfa) 12%, transparent), transparent 60%),
     color-mix(in srgb, var(--uc-panel-bg, #1a1028) 92%, black 8%);
-  border: 1px solid color-mix(in srgb, var(--uc-accent, #a78bfa) 22%, var(--uc-border, rgba(255,255,255,0.08)));
+  border: 1px solid color-mix(in srgb, var(--uc-accent, #a78bfa) 22%, var(--uc-border, rgba(255, 255, 255, 0.08)));
   overflow: hidden;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
@@ -373,7 +434,9 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
   padding: 12px 14px;
   cursor: pointer;
   color: var(--uc-text, #d4cce8);
-  &::-webkit-details-marker { display: none; }
+  &::-webkit-details-marker {
+    display: none;
+  }
 }
 .update-summary-main {
   display: flex;
@@ -389,7 +452,11 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: #f8f5ff;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--uc-accent, #a78bfa) 80%, white 8%), color-mix(in srgb, var(--uc-accent, #a78bfa) 55%, black 10%));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--uc-accent, #a78bfa) 80%, white 8%),
+    color-mix(in srgb, var(--uc-accent, #a78bfa) 55%, black 10%)
+  );
 }
 .update-title {
   font-size: 13px;
@@ -410,7 +477,7 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
 .update-section {
   border-radius: 12px;
   background: color-mix(in srgb, var(--uc-story-bg, #171222) 80%, black 10%);
-  border: 1px solid var(--uc-border, rgba(255,255,255,0.08));
+  border: 1px solid var(--uc-border, rgba(255, 255, 255, 0.08));
   overflow: hidden;
 }
 .update-section-title {
@@ -421,23 +488,36 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
   text-transform: uppercase;
   color: var(--uc-accent, #c4b5fd);
   background: color-mix(in srgb, var(--uc-accent, #a78bfa) 10%, transparent);
-  border-bottom: 1px solid var(--uc-border, rgba(255,255,255,0.06));
+  border-bottom: 1px solid var(--uc-border, rgba(255, 255, 255, 0.06));
 }
 .update-analysis {
   padding: 12px;
   font-size: 12px;
   line-height: 1.8;
   color: var(--uc-text, #ddd6f3);
-  :deep(p) { margin: 0 0 0.75em; white-space: pre-wrap; }
-  :deep(p:last-child) { margin-bottom: 0; }
-  :deep(ul) { margin: 6px 0 0 18px; }
-  :deep(h3), :deep(h4), :deep(h5) {
+  :deep(p) {
+    margin: 0 0 0.75em;
+    white-space: pre-wrap;
+  }
+  :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+  :deep(ul) {
+    margin: 6px 0 0 18px;
+  }
+  :deep(h3),
+  :deep(h4),
+  :deep(h5) {
     margin: 0 0 8px;
     color: var(--uc-accent, #a78bfa);
     font-size: 1em;
   }
-  :deep(strong) { color: var(--uc-md-bold, #f9a8d4); }
-  :deep(em) { color: var(--uc-md-italic, #93c5fd); }
+  :deep(strong) {
+    color: var(--uc-md-bold, #f9a8d4);
+  }
+  :deep(em) {
+    color: var(--uc-md-italic, #93c5fd);
+  }
   :deep(code) {
     color: var(--uc-md-code, #86efac);
     background: var(--uc-md-code-bg, #10151d);
@@ -452,20 +532,35 @@ const updateAnalysisHtml = computed(() => renderMarkdown(updateVariableCard.valu
   font-size: 12px;
   line-height: 1.7;
   color: #d6ffe8;
-  background:
-    linear-gradient(180deg, rgba(16, 21, 29, 0.96), rgba(12, 16, 24, 0.98));
+  background: linear-gradient(180deg, rgba(16, 21, 29, 0.96), rgba(12, 16, 24, 0.98));
   font-family: 'Courier New', monospace;
 }
 .scene-summary {
-  padding: 10px 14px; font-size: 12px; font-weight: 600;
-  color: var(--uc-muted, #7c6f96); cursor: pointer; list-style: none;
-  display: flex; align-items: center; gap: 7px;
-  &::-webkit-details-marker { display: none; }
-  i { font-size: 11px; color: var(--uc-muted, #6b5f80); }
-  &:hover { color: var(--uc-accent, #a78bfa); }
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--uc-muted, #7c6f96);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  &::-webkit-details-marker {
+    display: none;
+  }
+  i {
+    font-size: 11px;
+    color: var(--uc-muted, #6b5f80);
+  }
+  &:hover {
+    color: var(--uc-accent, #a78bfa);
+  }
 }
 .scene-text {
   padding: 0 14px 12px;
-  font-size: 12px; line-height: 1.8; color: var(--uc-text, #9d8fb0); white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--uc-text, #9d8fb0);
+  white-space: pre-wrap;
 }
 </style>
