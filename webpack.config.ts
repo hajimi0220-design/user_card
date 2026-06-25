@@ -128,6 +128,7 @@ function schema_dump(compiler: webpack.Compiler) {
   }
 }
 
+<<<<<<< HEAD
 const SILLY_TAVERN_PUBLIC = 'E:/muyootools-win32-x64/SillyTavern/public';
 const copy_dist_files = [
   { src: 'dist/角色卡/界面/状态栏/index.html', dest: 'dist/角色卡/界面/状态栏/index.html' },
@@ -160,6 +161,8 @@ function copy_dist(compiler: webpack.Compiler) {
   });
 }
 
+=======
+>>>>>>> 4f0b745981550e95a66a32adf5b43f01a2cde104
 let child_process: ChildProcess;
 const bundle = () => {
   exec('pnpm sync bundle all', { cwd: import.meta.dirname });
@@ -472,7 +475,10 @@ function parse_configuration(entry: Entry): (_env: any, argv: any) => webpack.Co
         { apply: watch_tavern_helper },
         { apply: schema_dump },
         { apply: tavern_sync },
+<<<<<<< HEAD
         { apply: copy_dist },
+=======
+>>>>>>> 4f0b745981550e95a66a32adf5b43f01a2cde104
         new VueLoaderPlugin(),
         unpluginAutoImport({
           dts: true,
@@ -485,6 +491,10 @@ function parse_configuration(entry: Entry): (_env: any, argv: any) => webpack.Co
             { from: 'klona', imports: ['klona'] },
             { from: 'vue-final-modal', imports: ['useModal'] },
             { from: 'zod', imports: ['z'] },
+<<<<<<< HEAD
+=======
+            { from: 'type-fest', imports: [['*', 'TypeFest']], type: true },
+>>>>>>> 4f0b745981550e95a66a32adf5b43f01a2cde104
           ],
         }),
         unpluginVueComponents({
