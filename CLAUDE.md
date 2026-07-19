@@ -8,4 +8,7 @@
 @.cursor/rules/脚本.mdc
 @.cursor/rules/mvu变量框架.mdc
 @.cursor/rules/mvu角色卡.mdc
+<<<<<<< HEAD
 @docs/ai-project-notes.md
+=======
+>>>>>>> a4d60f52b8b1b0f872a80088ba7e339b0933eeb2
