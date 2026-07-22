@@ -49,6 +49,7 @@
   "[vue]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+<<<<<<< HEAD
   "typescript.tsdk": "node_modules/typescript/lib",
   "claudeCode.environmentVariables": [
     {
@@ -57,4 +58,7 @@
   ],
   "claudeCode.allowDangerouslySkipPermissions": false,
   "claudeCode.disableLoginPrompt": false
+=======
+  "typescript.tsdk": "node_modules/typescript/lib"
+>>>>>>> f24091c9a91d583dafdb4867d858268ebc487545
 }
