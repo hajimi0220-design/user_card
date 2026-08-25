@@ -128,6 +128,7 @@ function schema_dump(compiler: webpack.Compiler) {
   }
 }
 
+<<<<<<< HEAD
 const SILLY_TAVERN_PUBLIC = 'E:/muyootools-win32-x64/SillyTavern/public';
 const copy_dist_files = [
   { src: 'dist/角色卡/界面/状态栏/index.html', dest: 'dist/角色卡/界面/状态栏/index.html' },
@@ -160,6 +161,8 @@ function copy_dist(compiler: webpack.Compiler) {
   });
 }
 
+=======
+>>>>>>> bc44abea1c2f7980dd9a2d9b909b4ad64bc8bdee
 let child_process: ChildProcess;
 const bundle = () => {
   exec('pnpm sync bundle all', { cwd: import.meta.dirname });
@@ -472,7 +475,10 @@ function parse_configuration(entry: Entry): (_env: any, argv: any) => webpack.Co
         { apply: watch_tavern_helper },
         { apply: schema_dump },
         { apply: tavern_sync },
+<<<<<<< HEAD
         { apply: copy_dist },
+=======
+>>>>>>> bc44abea1c2f7980dd9a2d9b909b4ad64bc8bdee
         new VueLoaderPlugin(),
         unpluginAutoImport({
           dts: true,
@@ -485,6 +491,10 @@ function parse_configuration(entry: Entry): (_env: any, argv: any) => webpack.Co
             { from: 'klona', imports: ['klona'] },
             { from: 'vue-final-modal', imports: ['useModal'] },
             { from: 'zod', imports: ['z'] },
+<<<<<<< HEAD
+=======
+            { from: 'type-fest', imports: [['*', 'TypeFest']], type: true },
+>>>>>>> bc44abea1c2f7980dd9a2d9b909b4ad64bc8bdee
           ],
         }),
         unpluginVueComponents({
@@ -593,9 +603,23 @@ function parse_configuration(entry: Entry): (_env: any, argv: any) => webpack.Co
       const cdn = {
         sass: 'https://jspm.dev/sass',
       };
+<<<<<<< HEAD
       return callback(
         null,
         'module-import ' + (cdn[request as keyof typeof cdn] ?? `https://testingcf.jsdelivr.net/npm/${request}/+esm`),
+=======
+      const package_json = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf-8')) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      const package_versions = { ...package_json.devDependencies, ...package_json.dependencies };
+      const version = package_versions[request]?.replace(/^[~^]/, '');
+      const versioned_request = /^[.\d]+$/.test(version) ? `${request}@${version}` : request;
+      return callback(
+        null,
+        'module-import ' +
+          (cdn[request as keyof typeof cdn] ?? `https://testingcf.jsdelivr.net/npm/${versioned_request}/+esm`),
+>>>>>>> bc44abea1c2f7980dd9a2d9b909b4ad64bc8bdee
       );
     },
   });
